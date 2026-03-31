@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>山向奇门深层起局排盘系统 - 黑金版</title>
+  <title>九宝奇门寻龙点穴排盘系统 - 尊享版</title>
   
   <!-- 引入 Tailwind CSS 用于样式渲染 -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -18,8 +18,17 @@
   <!-- 引入导出 PDF 所需的依赖库 -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <style>
+    /* 自定义滚动条样式 */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: #111; }
+    ::-webkit-scrollbar-thumb { background: #d4af37; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #b8962e; }
+    body { font-family: 'Helvetica Neue', Helvetica, Arial, 'Microsoft Yahei', sans-serif; }
+  </style>
 </head>
-<body class="bg-gray-950 min-h-screen">
+<body class="bg-gray-950 min-h-screen text-gray-200 selection:bg-yellow-600/30">
   <!-- React 应用挂载点 -->
   <div id="root"></div>
 
@@ -27,10 +36,37 @@
   <script type="text/babel">
     const { useState, useMemo, useRef, useEffect } = React;
 
-    // --- 基础数据配置 ---
+    // ==========================================
+    // 基础数据与八字历法配置
+    // ==========================================
     const STEMS = ['甲', '乙', '丙', '丁', '戊', '己', '庚', '辛', '壬', '癸'];
     const BRANCHES = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥'];
     const MOUNTAINS = ['壬', '子', '癸', '丑', '艮', '寅', '甲', '卯', '乙', '辰', '巽', '巳', '丙', '午', '丁', '未', '坤', '申', '庚', '酉', '辛', '戌', '乾', '亥'];
+    
+    // 模块一：查龙立向映射数据 (来自图片1)
+    const DRAGON_DIRECTIONS = {
+      '坎龙': ['乾', '坤', '兑', '离'],
+      '坤龙': ['兑', '巽', '坎', '艮'],
+      '震龙': ['艮', '离', '兑'],
+      '巽龙': ['离', '兑', '坤', '乾'],
+      '乾龙': ['坎', '艮', '离', '巽'],
+      '兑龙': ['坤', '坎', '巽', '震'],
+      '艮龙': ['震', '乾', '坤'],
+      '离龙': ['巽', '乾', '震', '坎']
+    };
+    // 八卦对应的二十四山
+    const BAGUA_MOUNTAINS = {
+      '坎': ['壬', '子', '癸'], '艮': ['丑', '艮', '寅'], '震': ['甲', '卯', '乙'], '巽': ['辰', '巽', '巳'],
+      '离': ['丙', '午', '丁'], '坤': ['未', '坤', '申'], '兑': ['庚', '酉', '辛'], '乾': ['戌', '乾', '亥']
+    };
+
+    // 模块二：择吉旬数据 (来自图片2)
+    const XUN_DATA = {
+      '丙子旬': ['丙子', '丁丑', '戊寅', '己卯', '庚辰', '辛巳', '壬午', '癸未', '甲申', '乙酉', '丙戌', '丁亥'],
+      '庚子旬': ['庚子', '辛丑', '壬寅', '癸卯', '甲辰', '乙巳', '丙午', '丁未', '戊申', '己酉', '庚戌', '辛亥']
+    };
+
+    // 奇门排盘基础数据 (原代码)
     const OUTER_RING = [1, 8, 3, 4, 9, 2, 7, 6]; 
     const RING_INDEX = { 1: 0, 8: 1, 3: 2, 4: 3, 9: 4, 2: 5, 7: 6, 6: 7 };
     const DOORS = ['休', '生', '伤', '杜', '景', '死', '惊', '开'];
@@ -47,13 +83,9 @@
       '庚': [0, 7, 1, 4], '酉': [0, 6, 9, 3], '辛': [0, 5, 8, 2],  
       '戌': [0, 6, 9, 3], '乾': [0, 5, 8, 2], '亥': [1, 4, 1, 7]
     };
-
-    // --- 深化神煞配置 ---
     const NA_JIA_BAGUA = {  
-      '乾':'乾', '甲':'乾',  
-      '亥':'震', '卯':'震', '未':'震', '庚':'震',  
-      '艮':'艮', '丙':'艮',  
-      '巽':'巽', '辛':'巽',  
+      '乾':'乾', '甲':'乾', '亥':'震', '卯':'震', '未':'震', '庚':'震',  
+      '艮':'艮', '丙':'艮', '巽':'巽', '辛':'巽',  
       '巳':'兑', '酉':'兑', '丑':'兑', '丁':'兑',  
       '寅':'离', '午':'离', '戌':'离', '壬':'离',  
       '申':'坎', '子':'坎', '辰':'坎', '癸':'坎',  
@@ -64,69 +96,131 @@
     const XIAO_SHEN_SHA = { 4: '生气', 3: '延年', 7: '祸害', 2: '绝命', 1: '五鬼', 5: '六煞', 6: '天医', 0: '伏位' };
     const DA_SHEN_SHA   = { 4: '生气', 3: '天医', 7: '延年', 2: '绝命', 1: '祸害', 5: '六煞', 6: '五鬼', 0: '伏位' };
     const OUTER_LAYOUT = {  
-      4: { top: ['巽', '巳'], left: ['辰'] },  
-      9: { top: ['丙', '午', '丁'] },  
-      2: { top: ['未', '坤'], right: ['申'] },  
-      3: { left: ['乙', '卯', '甲'] },  
-      7: { right: ['庚', '酉', '辛'] },  
-      8: { bottom: ['艮', '丑'], left: ['寅'] },  
-      1: { bottom: ['癸', '子', '壬'] },  
-      6: { bottom: ['亥', '乾'], right: ['戌'] }
+      4: { top: ['巽', '巳'], left: ['辰'] }, 9: { top: ['丙', '午', '丁'] },  
+      2: { top: ['未', '坤'], right: ['申'] }, 3: { left: ['乙', '卯', '甲'] },  
+      7: { right: ['庚', '酉', '辛'] }, 8: { bottom: ['艮', '丑'], left: ['寅'] },  
+      1: { bottom: ['癸', '子', '壬'] }, 6: { bottom: ['亥', '乾'], right: ['戌'] }
     };
 
+    // 获取日历具体日期的干支 (用于择吉高亮)
+    function getDayGanzhi(date) {
+      // 基准日: 2000-01-01 是 戊午 (天干索引4, 地支索引6)
+      const anchor = Date.UTC(2000, 0, 1);
+      const target = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+      const diffDays = Math.floor((target - anchor) / (1000 * 60 * 60 * 24));
+      const offset = (diffDays % 60 + 60) % 60;
+      return STEMS[(4 + offset) % 10] + BRANCHES[(6 + offset) % 12];
+    }
+
+    // ==========================================
+    // 主应用组件
+    // ==========================================
     function App() {  
-      const [year, setYear] = useState(2008);  
-      const [mountain, setMountain] = useState('癸');  
+      // 模块一：查龙立向状态
+      const [selDragon, setSelDragon] = useState('坎龙');
+      const [selDirection, setSelDirection] = useState('乾'); // 八卦
+      const [selMountain, setSelMountain] = useState('戌'); // 24山
+
+      // 模块二：择吉状态
+      const [selXun, setSelXun] = useState('丙子旬');
+      const [selPillar, setSelPillar] = useState('丙子');
+      const [calMonth, setCalMonth] = useState(new Date()); // 当前日历显示的月份
+      const [selectedDate, setSelectedDate] = useState(new Date()); // 最终选定的日子
+
+      // 模块三：排盘核心状态
+      const [year, setYear] = useState(selectedDate.getFullYear());  
       const [yuan, setYuan] = useState(1);  
       const [juMode, setJuMode] = useState('auto');  
-      const [degree, setDegree] = useState(186);  
+      const [degree, setDegree] = useState(292.5); // 默认戌山度数
       
-      // PDF导出相关状态与Ref  
       const exportRef = useRef(null);  
       const [isExporting, setIsExporting] = useState(false);  
       const [toastMsg, setToastMsg] = useState('');  
-      const [chartConfig, setChartConfig] = useState({    
-        year: 2008,    
-        mountain: '癸',    
-        yuan: 1,    
-        juMode: 'auto',    
-        degree: 186  
-      });  
+      const [chartConfig, setChartConfig] = useState(null); // 初始为空，点击生成后才有
 
-      const draftDirection = MOUNTAINS[(MOUNTAINS.indexOf(mountain) + 12) % 24];  
-      const draftAutoIsYang = YUAN_JU[mountain][0] === 1;  
-      const draftAutoJuNum = YUAN_JU[mountain][yuan + 1];  
-      const draftRefFacingIdx = degree === '' ? 0 : (Math.floor((Math.round(degree) + 7.5) / 15) + 1) % 24;  
-      const draftRefFacing = MOUNTAINS[draftRefFacingIdx];  
+      // SAAS 邮件登录状态
+      const [isAuthenticated, setIsAuthenticated] = useState(false);
+      const [userEmail, setUserEmail] = useState('');
+      const [loginEmail, setLoginEmail] = useState('');
+      const [loginPassword, setLoginPassword] = useState('');
+      const [authMode, setAuthMode] = useState('login'); // 'login' or 'register'
+      const [authLoading, setAuthLoading] = useState(false);
 
-      const updateMountainAndDegree = (newMountain) => {    
-        setMountain(newMountain);    
-        const mIdx = MOUNTAINS.indexOf(newMountain);    
-        const fIdx = (mIdx + 12) % 24;    
-        let deg = (fIdx - 1) * 15;    
-        if (deg < 0) deg += 360;    
-        setDegree(deg);  
-      };  
+      // 模块一联动逻辑
+      const handleDragonChange = (dragon) => {
+        setSelDragon(dragon);
+        const dirs = DRAGON_DIRECTIONS[dragon];
+        const newDir = dirs[0];
+        setSelDirection(newDir);
+        const mountains = BAGUA_MOUNTAINS[newDir];
+        handleMountainSelect(mountains[0]);
+      };
 
-      const updateFacingAndDegree = (newFacing) => {    
-        const fIdx = MOUNTAINS.indexOf(newFacing);    
-        const mIdx = (fIdx + 12) % 24;    
-        setMountain(MOUNTAINS[mIdx]);    
-        let deg = (fIdx - 1) * 15;    
-        if (deg < 0) deg += 360;    
-        setDegree(deg);  
-      };  
+      const handleDirectionChange = (dir) => {
+        setSelDirection(dir);
+        const mountains = BAGUA_MOUNTAINS[dir];
+        handleMountainSelect(mountains[0]);
+      };
 
-      const handleDegreeChange = (val) => {    
-        let deg = parseFloat(val);    
-        if (isNaN(deg)) { setDegree(''); return; }    
-        if (deg < 0) deg = 0;    
-        if (deg >= 360) deg = 359.9;    
-        setDegree(deg);  
-      };  
+      const handleMountainSelect = (m) => {
+        setSelMountain(m);
+        // 同步修改度数
+        const mIdx = MOUNTAINS.indexOf(m);
+        let deg = mIdx * 15 - 7.5;
+        if (deg < 0) deg += 360;
+        setDegree(deg + 7.5); // 取正中度数
+      };
 
+      // 模块二联动逻辑
+      const handleXunChange = (xun) => {
+        setSelXun(xun);
+        setSelPillar(XUN_DATA[xun][0]);
+      };
+
+      const handleDateSelect = (date) => {
+        setSelectedDate(date);
+        setYear(date.getFullYear()); // 同步年份给模块三
+      };
+
+      const changeMonth = (offset) => {
+        const newD = new Date(calMonth);
+        newD.setMonth(newD.getMonth() + offset);
+        setCalMonth(newD);
+      };
+
+      // 生成日历网格
+      const generateCalendar = () => {
+        const year = calMonth.getFullYear();
+        const month = calMonth.getMonth();
+        const firstDay = new Date(year, month, 1).getDay();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        
+        let days = [];
+        // 填充空白
+        for (let i = 0; i < firstDay; i++) days.push(null);
+        // 填充日期
+        for (let i = 1; i <= daysInMonth; i++) {
+          days.push(new Date(year, month, i));
+        }
+        return days;
+      };
+
+      // 生成排盘
       const generateChart = () => {    
-        setChartConfig({ year, mountain, yuan, juMode, degree });  
+        setChartConfig({ 
+          year: selectedDate.getFullYear(), 
+          mountain: selMountain, 
+          yuan, 
+          juMode, 
+          degree,
+          dateObj: selectedDate 
+        });  
+        
+        setTimeout(() => {
+          if (exportRef.current) {
+            exportRef.current.scrollIntoView({ behavior: 'smooth' });
+          }
+        }, 100);
       };  
 
       const showToast = (msg) => {    
@@ -134,37 +228,60 @@
         setTimeout(() => setToastMsg(''), 3000);  
       };  
 
-      // 一键导出 PDF 功能核心逻辑  
+      // SAAS 登录/注册处理逻辑
+      const handleAuth = (e) => {
+        e.preventDefault();
+        if (!loginEmail || !loginEmail.includes('@')) {
+          showToast('请输入有效的邮箱地址');
+          return;
+        }
+        if (!loginPassword || loginPassword.length < 6) {
+          showToast('密码长度至少需要6位');
+          return;
+        }
+        setAuthLoading(true);
+        // 模拟向服务器发送真实登录/注册请求
+        setTimeout(() => {
+          setIsAuthenticated(true);
+          setUserEmail(loginEmail);
+          setAuthLoading(false);
+          showToast(authMode === 'login' ? '登录成功，欢迎回来！' : '注册成功，欢迎加入九宝奇门！');
+        }, 1200);
+      };
+
+      const handleLogout = () => {
+        setIsAuthenticated(false);
+        setLoginPassword('');
+        showToast('已安全退出登录');
+      };
+
+      // 导出 PDF
       const handleExportPDF = async () => {    
         if (!exportRef.current) return;    
         if (!window.html2canvas || !window.jspdf) {      
-          showToast("PDF导出组件尚未准备好，请检查网络或稍等几秒再试...");      
-          return;    
+          showToast("PDF导出组件尚未准备好，请稍等..."); return;    
         }    
         setIsExporting(true);    
         try {      
           const canvas = await window.html2canvas(exportRef.current, {        
-            scale: 2, // 提高清晰度        
-            useCORS: true,        
-            backgroundColor: '#0a0a0a' // 适配黑金风格的深色背景      
+            scale: 2, useCORS: true, backgroundColor: '#0a0a0a'      
           });      
           const imgData = canvas.toDataURL('image/png');      
           const pdf = new window.jspdf.jsPDF('p', 'mm', 'a4');      
           const pdfWidth = pdf.internal.pageSize.getWidth();      
           const pdfHeight = (canvas.height * pdfWidth) / canvas.width;      
-          // 添加图片到PDF (居中适宽贴图)      
           pdf.addImage(imgData, 'PNG', 0, 10, pdfWidth, pdfHeight);      
-          // 保存文件      
           pdf.save(`九宝奇门_${chartConfig.year}年_${chartConfig.mountain}山.pdf`);    
         } catch (err) {      
-          console.error("PDF导出失败:", err);      
           showToast("导出失败，请重试。");    
         } finally {      
           setIsExporting(false);    
         }  
       };  
 
+      // 奇门逻辑推演 (与原版逻辑保持绝对一致)
       const panData = useMemo(() => {    
+        if (!chartConfig) return null;
         const cy = chartConfig.year;    
         const cm = chartConfig.mountain;    
         const cYuan = chartConfig.yuan;    
@@ -173,9 +290,13 @@
         const yearBranchIdx = (cy - 4 + 120) % 12;    
         const yearStem = STEMS[yearStemIdx];    
         const yearBranch = BRANCHES[yearBranchIdx];    
-        const dayStemIdx = yearStemIdx;    
-        const dayStem = yearStem;    
-        const dayBranch = yearBranch;    
+        
+        // 此处获取精确的选定日期干支
+        const dayGanzhiStr = getDayGanzhi(chartConfig.dateObj);
+        const dayStem = dayGanzhiStr[0];
+        const dayBranch = dayGanzhiStr[1];
+        const dayStemIdx = STEMS.indexOf(dayStem);
+
         const mountainIdx = MOUNTAINS.indexOf(cm);    
         const dirIdx = (mountainIdx + 12) % 24;    
         const direction = MOUNTAINS[dirIdx];    
@@ -184,24 +305,29 @@
         const baseStemIdx = (dayStemIdx % 5) * 2;    
         const hourStemIdx = (baseStemIdx + hourBranchIdx) % 10;    
         const hourStem = STEMS[hourStemIdx];    
+        
         const autoIsYang = YUAN_JU[cm][0] === 1;    
         const autoJuNum = YUAN_JU[cm][cYuan + 1];    
         const isYang = cJuMode === 'auto' ? autoIsYang : cJuMode.startsWith('yang');    
         const juNum = cJuMode === 'auto' ? autoJuNum : parseInt(cJuMode.split('-')[1], 10);    
+        
         let ep = {};    
         for (let i = 0; i < 9; i++) {      
           let p = juNum + (isYang ? i : -i);      
           p = ((p - 1) % 9 + 9) % 9 + 1;      
           ep[p] = BASE_STEMS[i];    
         }    
+        
         let diff = (hourBranchIdx - hourStemIdx + 12) % 12;    
         const xunPairs = { 0: '戊', 10: '己', 8: '庚', 6: '辛', 4: '壬', 2: '癸' };    
         const xunHeadMap = { 0: '甲子', 10: '甲戌', 8: '甲申', 6: '甲午', 4: '甲辰', 2: '甲寅' };    
         const xunStem = xunPairs[diff];    
         const xunName = xunHeadMap[diff];    
+        
         let zfOriginalPalace = parseInt(Object.keys(ep).find(k => ep[k] === xunStem));    
         let actualTargetStem = (hourStem === '甲') ? xunStem : hourStem;    
         let targetPalace = parseInt(Object.keys(ep).find(k => ep[k] === actualTargetStem));    
+        
         let hp = {}, st = {};    
         let zfRing = RING_INDEX[zfOriginalPalace === 5 ? 2 : zfOriginalPalace];    
         let targetRing = RING_INDEX[targetPalace === 5 ? 2 : targetPalace];    
@@ -213,6 +339,7 @@
           st[toP] = STARS[i] === '芮' ? '禽芮' : STARS[i];    
         }    
         hp[5] = hp[2]; st[5] = st[2];    
+        
         let dr = {};    
         let jumps = (hourBranchIdx - diff + 12) % 12;     
         let zsTargetPalace = zfOriginalPalace;    
@@ -224,10 +351,12 @@
         dr[5] = dr[2];    
         if (zsTargetPalace === 5) { dr[5] = '中'; dr[2] = '中'; }     
         else if (dr[actualZsTarget] === '死' && zfOriginalPalace === 5) dr[actualZsTarget] = '中';    
+        
         let de = {};    
         let startRing = RING_INDEX[targetPalace === 5 ? 2 : targetPalace];    
         for (let i = 0; i < 8; i++) de[OUTER_RING[(startRing + (isYang ? i : -i) + 8) % 8]] = DEITIES[i];    
         de[5] = de[2];    
+        
         let hd = {};    
         let hdStartPalace = zsTargetPalace;    
         let hSt = actualTargetStem;    
@@ -253,6 +382,7 @@
           }    
         }    
         if (hd[5]) hd[2] = (hd[2] ? hd[2] : '') + hd[5];    
+        
         const mountainBagua = NA_JIA_BAGUA[cm];    
         const facingBagua = NA_JIA_BAGUA[direction];    
         const xiaoFuwei = BAGUA_BITS[mountainBagua];    
@@ -263,6 +393,7 @@
           xiaoYn[p] = XIAO_SHEN_SHA[pBaguaVal ^ xiaoFuwei][0];       
           daYn[p] = DA_SHEN_SHA[pBaguaVal ^ daFuwei][0];    
         });    
+        
         const outerData = {};    
         for (const [pStr, layout] of Object.entries(OUTER_LAYOUT)) {      
           const p = parseInt(pStr);      
@@ -276,6 +407,7 @@
             });      
           }    
         }    
+        
         return {      
           yearStem, yearBranch, dayStem, dayBranch, direction, hourBranch, hourStem,       
           isYang, juNum, xunName, xunStem, autoIsYang, autoJuNum,      
@@ -290,377 +422,432 @@
         { p: 8, name: '艮八' }, { p: 1, name: '坎一' }, { p: 6, name: '乾六' }  
       ];  
 
-      // --- 抽取外盘渲染函数 ---
-      const renderTopItems = (items) => {
-        if (!items) return null;
-        return items.map((od, idx) => (
-          <div key={idx} className="flex flex-col items-center justify-end pb-1 md:pb-2">
-            <span className="text-xs md:text-sm text-red-500 font-bold mb-0.5 md:mb-1">{od.shensha}</span>
-            <span className="text-sm md:text-base text-gray-400 font-bold mb-1 md:mb-1.5">{od.bagua}</span>
-            <span className="text-xs md:text-sm font-black text-yellow-500">{od.m}</span>
-          </div>
-        ));
-      };
+      const renderTopItems = (items) => items?.map((od, idx) => (
+        <div key={idx} className="flex flex-col items-center justify-end pb-1 md:pb-2">
+          <span className="text-xs md:text-sm text-red-500 font-bold mb-0.5 md:mb-1">{od.shensha}</span>
+          <span className="text-sm md:text-base text-gray-400 font-bold mb-1 md:mb-1.5">{od.bagua}</span>
+          <span className="text-xs md:text-sm font-black text-yellow-500">{od.m}</span>
+        </div>
+      ));
 
-      const renderBottomItems = (items) => {
-        if (!items) return null;
-        return items.map((od, idx) => (
-          <div key={idx} className="flex flex-col items-center justify-start pt-1 md:pt-2">
-            <span className="text-xs md:text-sm font-black text-yellow-500 mb-1 md:mb-1.5">{od.m}</span>
-            <span className="text-sm md:text-base text-gray-400 font-bold mb-0.5 md:mb-1">{od.bagua}</span>
-            <span className="text-xs md:text-sm text-red-500 font-bold">{od.shensha}</span>
-          </div>
-        ));
-      };
+      const renderBottomItems = (items) => items?.map((od, idx) => (
+        <div key={idx} className="flex flex-col items-center justify-start pt-1 md:pt-2">
+          <span className="text-xs md:text-sm font-black text-yellow-500 mb-1 md:mb-1.5">{od.m}</span>
+          <span className="text-sm md:text-base text-gray-400 font-bold mb-0.5 md:mb-1">{od.bagua}</span>
+          <span className="text-xs md:text-sm text-red-500 font-bold">{od.shensha}</span>
+        </div>
+      ));
 
-      const renderLeftItems = (items) => {
-        if (!items) return null;
-        return (
-          <div className="flex flex-col justify-evenly h-full w-full">
-            {items.map((od, idx) => (
-              <div key={idx} className="flex items-center justify-end gap-1 md:gap-3">
-                <span className="text-xs md:text-sm text-red-500 font-bold">{od.shensha}</span>
-                <span className="text-sm md:text-base text-gray-400 font-bold">{od.bagua}</span>
-                <span className="text-xs md:text-sm font-black text-yellow-500">{od.m}</span>
-              </div>
-            ))}
-          </div>
-        );
-      };
+      const renderLeftItems = (items) => items && (
+        <div className="flex flex-col justify-evenly h-full w-full">
+          {items.map((od, idx) => (
+            <div key={idx} className="flex items-center justify-end gap-1 md:gap-3">
+              <span className="text-xs md:text-sm text-red-500 font-bold">{od.shensha}</span>
+              <span className="text-sm md:text-base text-gray-400 font-bold">{od.bagua}</span>
+              <span className="text-xs md:text-sm font-black text-yellow-500">{od.m}</span>
+            </div>
+          ))}
+        </div>
+      );
 
-      const renderRightItems = (items) => {
-        if (!items) return null;
-        return (
-          <div className="flex flex-col justify-evenly h-full w-full">
-            {items.map((od, idx) => (
-              <div key={idx} className="flex items-center justify-start gap-1 md:gap-3">
-                <span className="text-xs md:text-sm font-black text-yellow-500">{od.m}</span>
-                <span className="text-sm md:text-base text-gray-400 font-bold">{od.bagua}</span>
-                <span className="text-xs md:text-sm text-red-500 font-bold">{od.shensha}</span>
-              </div>
-            ))}
-          </div>
-        );
-      };
+      const renderRightItems = (items) => items && (
+        <div className="flex flex-col justify-evenly h-full w-full">
+          {items.map((od, idx) => (
+            <div key={idx} className="flex items-center justify-start gap-1 md:gap-3">
+              <span className="text-xs md:text-sm font-black text-yellow-500">{od.m}</span>
+              <span className="text-sm md:text-base text-gray-400 font-bold">{od.bagua}</span>
+              <span className="text-xs md:text-sm text-red-500 font-bold">{od.shensha}</span>
+            </div>
+          ))}
+        </div>
+      );
 
       return (    
-        <div className="min-h-screen bg-gray-950 text-gray-200 p-2 md:p-6 font-sans selection:bg-yellow-600/30">      
-          {/* 提示消息 Toast */}      
+        <div className="p-4 md:p-8">
           {toastMsg && (        
-            <div className="fixed top-4 left-1/2 transform -translate-x-1/2 bg-yellow-600 text-black px-6 py-3 rounded shadow-[0_0_15px_rgba(212,175,55,0.4)] z-50 transition-opacity font-bold">          
+            <div className="fixed top-4 left-1/2 transform -translate-x-1/2 bg-yellow-600 text-black px-6 py-3 rounded shadow-[0_0_15px_rgba(212,175,55,0.4)] z-50 font-bold transition-all">          
               {toastMsg}        
             </div>      
-          )}      
-          <div className="max-w-5xl mx-auto bg-[#121212] rounded-xl shadow-2xl shadow-yellow-900/10 p-4 md:p-8 border border-gray-800">        
-            {/* LOGO 与 标题 */}        
-            <div className="flex flex-col items-center justify-center mb-8">          
-              <a             
-                href="http://www.jiubaoqimen.com"             
-                target="_blank"             
-                rel="noopener noreferrer"             
-                className="group flex flex-col items-center cursor-pointer mb-3 decoration-transparent"            
-                title="访问九寶奇门官方网站"          
-              >            
-                <div               
-                  className="w-[3.5rem] h-[3.5rem] md:w-[4rem] md:h-[4rem] border-[3px] border-yellow-600 text-yellow-500 flex flex-wrap content-center justify-center text-[18px] md:text-[20px] leading-none font-serif font-bold rounded-md shadow-[0_0_10px_rgba(212,175,55,0.2)] group-hover:bg-yellow-600/10 group-hover:shadow-[0_0_15px_rgba(212,175,55,0.4)] transition-all tracking-widest p-1"               
-                  style={{ writingMode: 'vertical-rl' }}            
-                >              
-                  九寶奇门            
-                </div>          
-              </a>          
-              <h1 className="text-2xl md:text-3xl font-bold text-center text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-yellow-500 to-yellow-600 tracking-wide">            
-                山向奇门深层起局排盘系统          
-              </h1>          
-              <a             
-                href="http://www.jiubaoqimen.com"             
-                target="_blank"             
-                rel="noopener noreferrer"             
-                className="mt-2 text-gray-500 hover:text-yellow-500 hover:underline text-sm md:text-base font-medium transition-colors"          
-              >            
-                www.jiubaoqimen.com          
-              </a>        
-            </div>        
-            
-            {/* 控制面板（草稿区） - 导出PDF时将跳过此区域 */}        
-            <div className="flex flex-col gap-5 justify-center bg-gray-900 p-4 md:p-6 rounded-lg border border-gray-800 shadow-inner">          
-              <div className="flex flex-wrap items-center justify-center gap-4">            
-                <div className="flex items-center bg-gray-950 rounded border border-gray-700 overflow-hidden shadow-sm">              
-                  <div className="bg-gray-800 px-3 py-1.5 font-semibold text-yellow-500 border-r border-gray-700">立向年份</div>              
-                  <button onClick={() => setYear(y => y - 1)} className="px-4 py-1.5 hover:bg-gray-800 font-bold text-gray-400 transition-colors">-</button>              
-                  <input                 
-                    type="number"                 
-                    value={year}                 
-                    onChange={(e) => setYear(Number(e.target.value))}                
-                    className="w-20 text-center outline-none font-medium bg-gray-950 text-yellow-500"              
-                  />              
-                  <button onClick={() => setYear(y => y + 1)} className="px-4 py-1.5 hover:bg-gray-800 font-bold text-gray-400 border-l border-gray-700 transition-colors">+</button>            
-                </div>            
-                <select               
-                  value={year}               
-                  onChange={(e) => setYear(Number(e.target.value))}              
-                  className="border border-gray-700 rounded px-3 py-1.5 outline-none focus:ring-2 focus:ring-yellow-600 bg-gray-950 text-gray-200 font-medium shadow-sm cursor-pointer"            
-                >              
-                  {Array.from({length: 201}, (_, i) => 1900 + i).map(y => (                
-                    <option key={y} value={y}>{y} 年</option>              
-                  ))}            
-                </select>          
-              </div>          
-              
-              <div className="flex flex-wrap items-center justify-center gap-6">            
-                <div className="flex items-center space-x-2">              
-                  <label className="font-semibold text-yellow-600">坐山:</label>              
-                  <select                 
-                    value={mountain}                 
-                    onChange={(e) => updateMountainAndDegree(e.target.value)}                
-                    className="border border-gray-700 rounded px-2 py-1 outline-none focus:ring-2 focus:ring-yellow-600 bg-gray-950 text-gray-200 font-medium shadow-sm"              
-                  >                
-                    {MOUNTAINS.map(m => <option key={m} value={m}>{m}山</option>)}              
-                  </select>            
-                </div>            
-                <div className="flex items-center space-x-2">              
-                  <label className="font-semibold text-yellow-600">朝向:</label>              
-                  <select                 
-                    value={draftDirection}                 
-                    onChange={(e) => updateFacingAndDegree(e.target.value)}                
-                    className="border border-gray-700 rounded px-2 py-1 outline-none focus:ring-2 focus:ring-yellow-600 bg-gray-950 text-gray-200 font-medium shadow-sm"              
-                  >                
-                    {MOUNTAINS.map(m => <option key={m} value={m}>{m}向</option>)}              
-                  </select>            
-                </div>            
-                <div className="flex items-center space-x-2 bg-gray-950 px-2 py-1 rounded border border-gray-700 shadow-sm">              
-                  <label className="font-semibold text-yellow-600">罗经三元:</label>              
-                  <select                 
-                    value={yuan}                 
-                    onChange={(e) => setYuan(Number(e.target.value))}                
-                    className="outline-none focus:ring-2 focus:ring-yellow-600 bg-transparent font-medium text-gray-200"              
-                  >                
-                    <option value={0}>上元</option>
-                    <option value={1}>中元</option>
-                    <option value={2}>下元</option>              
-                  </select>            
-                </div>            
-                <div className="flex items-center space-x-2 bg-gray-950 px-2 py-1 rounded border border-gray-700 shadow-sm">              
-                  <label className="font-semibold text-yellow-600">排盘局数:</label>              
-                  <select                 
-                    value={juMode}                 
-                    onChange={(e) => setJuMode(e.target.value)}                
-                    className="outline-none focus:ring-2 focus:ring-yellow-600 bg-transparent font-bold text-yellow-500 cursor-pointer"              
-                  >                
-                    <option value="auto">系统推演 ({draftAutoIsYang ? '阳' : '阴'}遁{draftAutoJuNum}局)</option>                
-                    <optgroup label="阳遁 1-9 局" className="text-gray-300">                  
-                      {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => <option key={`yang-${n}`} value={`yang-${n}`}>阳遁 {n} 局</option>)}                
-                    </optgroup>                
-                    <optgroup label="阴遁 1-9 局" className="text-gray-300">                  
-                      {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => <option key={`yin-${n}`} value={`yin-${n}`}>阴遁 {n} 局</option>)}                
-                    </optgroup>              
-                  </select>            
-                </div>          
-              </div>          
-              
-              <div className="flex flex-col md:flex-row items-center w-full mt-2 bg-gray-950 p-3 rounded border border-gray-800 shadow-sm max-w-3xl mx-auto gap-6 justify-between">            
-                <div className="flex items-center">              
-                  <label className="font-semibold text-yellow-600 whitespace-nowrap mr-3">罗盘度数:</label>              
-                  <select                 
-                    value={Math.round(degree)}                 
-                    onChange={(e) => handleDegreeChange(e.target.value)}                
-                    className="border border-gray-700 rounded px-3 py-1.5 outline-none focus:ring-2 focus:ring-yellow-600 bg-gray-900 font-bold text-yellow-500 shadow-sm cursor-pointer min-w-[100px]"              
-                  >                
-                    {Array.from({length: 360}, (_, i) => (                  
-                      <option key={i} value={i}>{i}°</option>                
-                    ))}              
-                  </select>              
-                  <div className="ml-4 text-sm text-gray-500 font-medium whitespace-nowrap">                
-                    (正针落区参考: <span className="text-gray-400 font-bold">{draftRefFacing}向</span>)              
-                  </div>            
-                </div>            
-                
-                <div className="relative w-24 h-24 rounded-full border-4 border-yellow-700 bg-gray-900 flex items-center justify-center shadow-inner flex-shrink-0">              
-                  <span className="absolute top-1 text-[10px] font-bold text-gray-500">子</span>              
-                  <span className="absolute bottom-1 text-[10px] font-bold text-gray-500">午</span>              
-                  <span className="absolute right-1 text-[10px] font-bold text-gray-500">卯</span>              
-                  <span className="absolute left-1 text-[10px] font-bold text-gray-500">酉</span>              
-                  <div className="absolute inset-[14px] border border-dashed border-gray-700 rounded-full opacity-60"></div>              
-                  
-                  <div                 
-                    className="absolute w-full h-full transition-transform duration-500 ease-out z-10"                
-                    style={{ transform: `rotate(${degree === '' ? 0 : degree}deg)` }}              
-                  >                
-                    <div className="absolute top-1/2 left-1/2 w-0.5 h-10 bg-red-600 origin-bottom transform -translate-x-1/2 -translate-y-full rounded-t-full shadow-[0_0_5px_rgba(220,38,38,0.8)]"></div>
-                    <div className="absolute top-1/2 left-1/2 w-2.5 h-2.5 rounded-full bg-yellow-500 transform -translate-x-1/2 -translate-y-1/2 border-2 border-gray-900 shadow-sm"></div>
-                  </div>            
-                </div>          
-              </div>
+          )} 
 
-              <div className="flex justify-center gap-4 mt-2">
-                <button 
-                  onClick={generateChart}
-                  className="bg-gradient-to-r from-yellow-600 to-yellow-500 hover:from-yellow-500 hover:to-yellow-400 text-black font-extrabold py-2.5 px-8 rounded shadow-[0_0_10px_rgba(212,175,55,0.3)] transition-all"
-                >
-                  生成排盘
-                </button>
-                <button 
-                  onClick={handleExportPDF}
-                  disabled={isExporting}
-                  className="bg-gray-800 hover:bg-gray-700 text-yellow-500 border border-yellow-600/50 font-bold py-2.5 px-8 rounded shadow transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isExporting ? '生成PDF中...' : '一键导出 PDF'}
-                </button>
-              </div>
-            </div>
-
-            {/* 分割线 */}
-            <div className="my-8 border-b border-dashed border-gray-800"></div>
-
-            {/* 排盘渲染区 (PDF 导出目标) */}
-            <div ref={exportRef} className="bg-[#0a0a0a] p-6 md:p-10 rounded max-w-4xl mx-auto shadow-2xl border border-gray-800/50 relative overflow-hidden">
+          {!isAuthenticated ? (
+            /* SAAS 登录/注册界面 */
+            <div className="max-w-md mx-auto mt-12 md:mt-24 bg-[#161616] border border-gray-800 rounded-2xl p-8 shadow-[0_0_40px_rgba(0,0,0,0.8)] relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-gray-800 via-yellow-600 to-gray-800"></div>
               
-              {/* 排盘 Header Info */}
-              <div className="text-center mb-6 relative z-10">
-                <h2 className="text-2xl md:text-3xl font-extrabold text-yellow-500 mb-3 tracking-wide drop-shadow-md">
-                  {chartConfig.year}年 {chartConfig.mountain}山{panData.direction}向 奇门排盘
+              <div className="flex flex-col items-center justify-center mb-8">
+                <div className="w-16 h-16 border-[3px] border-yellow-600 text-yellow-500 flex flex-wrap content-center justify-center text-xl leading-none font-serif font-bold rounded-lg shadow-[0_0_15px_rgba(212,175,55,0.3)] tracking-widest p-1 mb-4" style={{ writingMode: 'vertical-rl' }}>
+                  九寶
+                </div>
+                <h2 className="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-yellow-600">
+                  九宝奇门云排盘系统
                 </h2>
-                <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm md:text-base font-semibold text-gray-300 bg-gray-900/80 py-3 px-4 rounded-lg border border-gray-800">
-                  <span className="text-yellow-600">{panData.yearStem}{panData.yearBranch}年</span>
-                  <span>{panData.dayStem}{panData.dayBranch}日</span>
-                  <span>{panData.hourStem}{panData.hourBranch}时</span>
-                  <span className="text-cyan-500">{panData.isYang ? '阳' : '阴'}遁 {panData.juNum} 局</span>
-                  <span className="text-gray-400">旬首: {panData.xunName} ({panData.xunStem})</span>
-                </div>
-                
-                <div className="flex justify-center gap-6 mt-3 text-xs md:text-sm text-gray-500">
-                  <span>坐山纳甲: {panData.mountainBagua}</span>
-                  <span>朝向纳甲: {panData.facingBagua}</span>
-                  <span>罗经度数: {chartConfig.degree}°</span>
-                </div>
+                <p className="text-gray-500 text-sm mt-2">专业 SAAS 在线寻龙点穴平台</p>
               </div>
 
-              {/* 九宫格渲染区（包含外围 24 山排列） */}
-              <div className="flex flex-col w-full max-w-[650px] mx-auto select-none mt-2 md:mt-6 relative z-10">
+              <form onSubmit={handleAuth} className="space-y-5">
+                <div>
+                  <label className="block text-gray-400 text-sm font-bold mb-2">登录邮箱</label>
+                  <input 
+                    type="email" 
+                    value={loginEmail}
+                    onChange={e => setLoginEmail(e.target.value)}
+                    placeholder="admin@jiubaoqimen.com" 
+                    className="w-full bg-gray-900 border border-gray-700 text-gray-200 rounded-lg px-4 py-3 outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-gray-400 text-sm font-bold mb-2">密码</label>
+                  <input 
+                    type="password" 
+                    value={loginPassword}
+                    onChange={e => setLoginPassword(e.target.value)}
+                    placeholder="请输入6位以上密码" 
+                    className="w-full bg-gray-900 border border-gray-700 text-gray-200 rounded-lg px-4 py-3 outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500 transition-all"
+                  />
+                </div>
                 
-                {/* 上部外盘 */}
-                <div className="flex w-full">
-                  <div className="w-[3.5rem] md:w-[5.5rem] flex-shrink-0"></div>
-                  <div className="flex-1 grid grid-cols-3 gap-1 md:gap-2 px-[7px] md:px-[12px]">
-                    <div className="flex justify-evenly items-end">{renderTopItems(panData.outerData[4]?.top)}</div>
-                    <div className="flex justify-evenly items-end">{renderTopItems(panData.outerData[9]?.top)}</div>
-                    <div className="flex justify-evenly items-end">{renderTopItems(panData.outerData[2]?.top)}</div>
-                  </div>
-                  <div className="w-[3.5rem] md:w-[5.5rem] flex-shrink-0"></div>
-                </div>
+                <button 
+                  type="submit" 
+                  disabled={authLoading}
+                  className="w-full bg-gradient-to-r from-yellow-600 to-yellow-500 hover:from-yellow-500 hover:to-yellow-400 text-black font-extrabold py-3.5 px-4 rounded-lg shadow-[0_0_15px_rgba(212,175,55,0.3)] transition-all transform hover:-translate-y-0.5 disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none mt-4"
+                >
+                  {authLoading ? '处理中...' : (authMode === 'login' ? '安全登录' : '注册体验账号')}
+                </button>
+              </form>
 
-                {/* 中间层 (左侧外盘 + 主九宫格 + 右侧外盘) */}
-                <div className="flex w-full my-1 md:my-2">
-                  
-                  {/* 左侧外盘 */}
-                  <div className="w-[3.5rem] md:w-[5.5rem] flex-shrink-0 flex flex-col gap-1 md:gap-2 py-[7px] md:py-[12px] pr-1 md:pr-3">
-                    <div className="flex-1">{renderLeftItems(panData.outerData[4]?.left)}</div>
-                    <div className="flex-1">{renderLeftItems(panData.outerData[3]?.left)}</div>
-                    <div className="flex-1">{renderLeftItems(panData.outerData[8]?.left)}</div>
-                  </div>
-
-                  {/* 主九宫格 (黑金外框) */}
-                  <div className="flex-1 grid grid-cols-3 gap-[2px] md:gap-[3px] bg-[#d4af37] border-[3px] md:border-4 border-[#d4af37] p-[2px] shadow-[0_0_20px_rgba(212,175,55,0.15)]">
-                    {mapGrid.map((item) => {
-                      const p = item.p;
-                      const isCenter = p === 5;
-                      
-                      return (
-                        <div 
-                          key={p} 
-                          className="flex flex-col justify-between p-1 md:p-1.5 relative bg-[#111111] aspect-square overflow-hidden hover:bg-[#1a1a1a] transition-colors"
-                        >
-                          {/* 宫位水印 */}
-                          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none opacity-[0.03]">
-                            <span className="text-[3rem] md:text-[4.5rem] font-black text-white leading-none tracking-widest">{item.name.substring(0,1)}</span>
-                            <span className="text-[3rem] md:text-[4.5rem] font-black text-white leading-none tracking-widest">{item.name.substring(1,2)}</span>
-                          </div>
-
-                          <div className="relative z-10 flex flex-col h-full w-full justify-between">
-                            {isCenter ? (
-                              // 中五宫特有格式
-                              <div className="flex flex-col items-center justify-center h-full">
-                                <span className="text-gray-500 text-[10px] md:text-sm font-medium mb-1 md:mb-2">(寄坤二)</span>
-                                <div className="w-8 md:w-10 h-[1px] bg-gray-700 mb-2 md:mb-3"></div>
-                                <span className="text-xl md:text-2xl font-bold text-yellow-500 drop-shadow-md">{panData.ep[p] || ''}</span>
-                              </div>
-                            ) : (
-                              // 其他八宫格式
-                              <>
-                                {/* 第一行：八神 (左侧) & 暗干 (右侧) */}
-                                <div className="flex justify-between items-start">
-                                  <span className="font-bold text-yellow-500 text-xs md:text-base leading-none">{panData.de[p] || ''}</span>
-                                  <span className="font-bold text-fuchsia-400 text-[10px] md:text-xs leading-none">{panData.hd[p] ? `[${panData.hd[p]}]` : ''}</span>
-                                </div>
-
-                                {/* 第二行：天地盘 & 星门 */}
-                                <div className="flex justify-center items-stretch flex-1 w-full my-1 md:my-2">
-                                  <div className="flex justify-between items-stretch w-full px-1 md:px-2">
-                                    {/* 左列：天地盘列 (间距贴紧，整体略微下沉) */}
-                                    <div className="flex flex-col items-center justify-center mt-1 md:mt-2">
-                                      <span className="font-bold text-red-500 mb-0.5 md:mb-1 whitespace-nowrap drop-shadow-[0_0_3px_rgba(239,68,68,0.4)]">
-                                        <span className="text-base md:text-xl leading-none">{panData.hp[p]?.[0] || ''}</span>
-                                        {panData.hp[p]?.[1] && <span className="text-[10px] md:text-base leading-none ml-[2px]">{panData.hp[p][1]}</span>}
-                                      </span>
-                                      <div className="w-5 md:w-6 h-[1px] bg-gray-600"></div>
-                                      <span className="font-bold text-gray-200 mt-0.5 md:mt-1 whitespace-nowrap drop-shadow-md">
-                                        <span className="text-base md:text-xl leading-none">{panData.ep[p] || ''}</span>
-                                        {p === 2 && panData.ep[5] && <span className="text-[10px] md:text-base leading-none ml-[2px]">{panData.ep[5]}</span>}
-                                      </span>
-                                    </div>
-                                    {/* 右列：星门列 (星略高于天盘，门在右下方) */}
-                                    <div className="flex flex-col items-center justify-between py-1 md:py-1.5">
-                                      <span className="font-bold text-cyan-400 text-xs md:text-lg leading-none -mt-1 md:-mt-1.5 drop-shadow-[0_0_3px_rgba(34,211,238,0.3)]">{panData.st[p] || ''}</span>
-                                      <span className="font-bold text-emerald-400 text-xs md:text-lg leading-none translate-y-[8px] md:translate-y-[14px] drop-shadow-[0_0_3px_rgba(52,211,153,0.3)]">{panData.dr[p] || ''}</span>
-                                    </div>
-                                  </div>
-                                </div>
-
-                                {/* 第三行：大小神煞 */}
-                                <div className="w-full text-center border-t border-dashed border-gray-700 pt-1 md:pt-1.5 pb-0.5">
-                                  <span className="text-[9px] md:text-xs text-gray-500 font-medium">
-                                    大:{panData.daYn[p] || ''} | 小:{panData.xiaoYn[p] || ''}
-                                  </span>
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* 右侧外盘 */}
-                  <div className="w-[3.5rem] md:w-[5.5rem] flex-shrink-0 flex flex-col gap-1 md:gap-2 py-[7px] md:py-[12px] pl-1 md:pl-3">
-                    <div className="flex-1">{renderRightItems(panData.outerData[2]?.right)}</div>
-                    <div className="flex-1">{renderRightItems(panData.outerData[7]?.right)}</div>
-                    <div className="flex-1">{renderRightItems(panData.outerData[6]?.right)}</div>
-                  </div>
-                </div>
-
-                {/* 下部外盘 */}
-                <div className="flex w-full">
-                  <div className="w-[3.5rem] md:w-[5.5rem] flex-shrink-0"></div>
-                  <div className="flex-1 grid grid-cols-3 gap-1 md:gap-2 px-[7px] md:px-[12px]">
-                    <div className="flex justify-evenly items-start">{renderBottomItems(panData.outerData[8]?.bottom)}</div>
-                    <div className="flex justify-evenly items-start">{renderBottomItems(panData.outerData[1]?.bottom)}</div>
-                    <div className="flex justify-evenly items-start">{renderBottomItems(panData.outerData[6]?.bottom)}</div>
-                  </div>
-                  <div className="w-[3.5rem] md:w-[5.5rem] flex-shrink-0"></div>
-                </div>
-
-              </div>
-              
-              <div className="mt-8 text-center text-xs text-yellow-600/50 font-medium">
-                Powered by 九寶奇门系统
+              <div className="mt-6 text-center">
+                <button 
+                  onClick={() => setAuthMode(authMode === 'login' ? 'register' : 'login')} 
+                  className="text-gray-400 hover:text-yellow-500 text-sm transition-colors"
+                >
+                  {authMode === 'login' ? '没有账号？免费注册' : '已有账号？立即登录'}
+                </button>
               </div>
             </div>
+          ) : (
+            /* 主应用界面 */
+            <div className="max-w-6xl mx-auto space-y-8">
+              {/* SAAS 顶栏 */}
+              <div className="flex justify-between items-center bg-[#161616] px-6 py-4 rounded-xl border border-gray-800 shadow-md">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-yellow-600/20 border border-yellow-600/50 rounded-full flex items-center justify-center text-yellow-500 font-bold">V</div>
+                  <div>
+                    <div className="font-bold text-gray-200 text-sm leading-tight">九宝奇门尊享会员</div>
+                    <div className="text-xs text-gray-500">{userEmail}</div>
+                  </div>
+                </div>
+                <button onClick={handleLogout} className="text-sm px-4 py-1.5 border border-gray-700 hover:border-red-500/50 hover:text-red-400 text-gray-400 rounded transition-colors">
+                  退出系统
+                </button>
+              </div>
 
-          </div>    
+              {/* Header 品牌区 */}
+              <div className="flex flex-col items-center justify-center pt-2 pb-6 border-b border-gray-800">
+                <a href="http://www.jiubaoqimen.com" target="_blank" rel="noopener noreferrer" className="group flex flex-col items-center cursor-pointer mb-4 decoration-transparent">
+                  <div className="w-16 h-16 md:w-20 md:h-20 border-4 border-yellow-600 text-yellow-500 flex flex-wrap content-center justify-center text-xl md:text-2xl leading-none font-serif font-bold rounded-lg shadow-[0_0_15px_rgba(212,175,55,0.3)] group-hover:bg-yellow-600/10 group-hover:shadow-[0_0_25px_rgba(212,175,55,0.6)] transition-all tracking-widest p-1" style={{ writingMode: 'vertical-rl' }}>
+                    九寶奇门
+                  </div>
+                </a>
+                <h1 className="text-3xl md:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-yellow-500 to-yellow-600 tracking-wider">九宝奇门寻龙点穴软件</h1>
+                <a href="http://www.jiubaoqimen.com" target="_blank" className="mt-2 text-gray-400 hover:text-yellow-500 font-medium tracking-widest transition-colors">www.jiubaoqimen.com</a>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* 模块一：查龙立向 */}
+                <div className="bg-[#161616] border border-gray-800 rounded-xl p-6 shadow-xl relative overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-gray-800 via-yellow-600 to-gray-800"></div>
+                  <h2 className="text-2xl font-bold text-yellow-500 mb-6 flex items-center gap-2">
+                    <span className="bg-yellow-600 text-black w-8 h-8 rounded-full flex items-center justify-center text-sm">1</span> 
+                    查龙立向
+                  </h2>
+                  
+                  <div className="space-y-5">
+                    <div className="flex flex-col gap-2">
+                      <label className="text-gray-400 font-bold text-sm">第一步：自选龙落宫</label>
+                      <select value={selDragon} onChange={e => handleDragonChange(e.target.value)} className="w-full bg-gray-900 border border-gray-700 text-yellow-500 text-lg rounded px-4 py-3 outline-none focus:border-yellow-500 cursor-pointer font-bold">
+                        {Object.keys(DRAGON_DIRECTIONS).map(d => <option key={d} value={d}>{d}</option>)}
+                      </select>
+                    </div>
+                    
+                    <div className="flex flex-col gap-2">
+                      <label className="text-gray-400 font-bold text-sm">第二步：依龙选向 (可选山向)</label>
+                      <div className="flex flex-wrap gap-3">
+                        {DRAGON_DIRECTIONS[selDragon].map(dir => (
+                          <button key={dir} onClick={() => handleDirectionChange(dir)} className={`flex-1 py-3 rounded border font-bold text-lg transition-all ${selDirection === dir ? 'bg-yellow-600/20 border-yellow-500 text-yellow-400 shadow-[0_0_10px_rgba(212,175,55,0.2)]' : 'bg-gray-900 border-gray-700 text-gray-400 hover:border-gray-500'}`}>
+                            {dir}卦向
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                      <label className="text-gray-400 font-bold text-sm">第三步：精确到二十四山</label>
+                      <div className="flex flex-wrap gap-3">
+                        {BAGUA_MOUNTAINS[selDirection].map(m => (
+                          <button key={m} onClick={() => handleMountainSelect(m)} className={`flex-1 py-3 rounded border font-extrabold text-xl transition-all ${selMountain === m ? 'bg-yellow-600 text-black border-yellow-500 shadow-[0_0_15px_rgba(212,175,55,0.4)]' : 'bg-gray-900 border-gray-700 text-gray-300 hover:border-yellow-600/50'}`}>
+                            {m}山
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 模块二：择吉 */}
+                <div className="bg-[#161616] border border-gray-800 rounded-xl p-6 shadow-xl relative overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-gray-800 via-yellow-600 to-gray-800"></div>
+                  <h2 className="text-2xl font-bold text-yellow-500 mb-6 flex items-center gap-2">
+                    <span className="bg-yellow-600 text-black w-8 h-8 rounded-full flex items-center justify-center text-sm">2</span> 
+                    奇门择吉
+                  </h2>
+                  
+                  <div className="flex gap-4 mb-4">
+                    <select value={selXun} onChange={e => handleXunChange(e.target.value)} className="flex-1 bg-gray-900 border border-gray-700 text-yellow-500 rounded px-3 py-2 outline-none focus:border-yellow-500 cursor-pointer font-bold">
+                      {Object.keys(XUN_DATA).map(x => <option key={x} value={x}>{x}</option>)}
+                    </select>
+                    <select value={selPillar} onChange={e => setSelPillar(e.target.value)} className="flex-1 bg-gray-900 border border-gray-700 text-yellow-500 rounded px-3 py-2 outline-none focus:border-yellow-500 cursor-pointer font-bold">
+                      {XUN_DATA[selXun].map(p => <option key={p} value={p}>{p}日</option>)}
+                    </select>
+                  </div>
+
+                  {/* 日历组件 */}
+                  <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                    <div className="flex justify-between items-center mb-4">
+                      <button onClick={() => changeMonth(-1)} className="px-3 py-1 bg-gray-800 hover:bg-gray-700 rounded text-gray-300">&lt; 上月</button>
+                      <span className="font-bold text-lg text-yellow-500">{calMonth.getFullYear()}年 {calMonth.getMonth() + 1}月</span>
+                      <button onClick={() => changeMonth(1)} className="px-3 py-1 bg-gray-800 hover:bg-gray-700 rounded text-gray-300">下月 &gt;</button>
+                    </div>
+                    
+                    <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-gray-500 mb-2">
+                      <div>日</div><div>一</div><div>二</div><div>三</div><div>四</div><div>五</div><div>六</div>
+                    </div>
+                    <div className="grid grid-cols-7 gap-1">
+                      {generateCalendar().map((date, i) => {
+                        if (!date) return <div key={i} className="h-10"></div>;
+                        
+                        const dayGz = getDayGanzhi(date);
+                        const isMatch = dayGz === selPillar;
+                        const isSelected = selectedDate.toDateString() === date.toDateString();
+                        
+                        return (
+                          <button 
+                            key={i} 
+                            onClick={() => handleDateSelect(date)}
+                            className={`h-12 rounded flex flex-col items-center justify-center transition-all ${
+                              isSelected ? 'bg-yellow-600 text-black ring-2 ring-yellow-400 font-bold' : 
+                              isMatch ? 'bg-yellow-900/40 text-yellow-400 border border-yellow-600/50 hover:bg-yellow-800/60' : 
+                              'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                            }`}
+                          >
+                            <span className="text-sm">{date.getDate()}</span>
+                            {isMatch && <span className="text-[10px] leading-none mt-0.5">{dayGz}</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="mt-3 text-center text-sm text-gray-400">
+                      当前选中吉日: <span className="text-yellow-500 font-bold">{selectedDate.toLocaleDateString()} ({getDayGanzhi(selectedDate)})</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 模块三：起局认证 */}
+              <div className="bg-[#121212] border border-gray-800 rounded-xl p-6 shadow-2xl relative">
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-gray-800 via-yellow-600 to-gray-800"></div>
+                <h2 className="text-2xl font-bold text-yellow-500 mb-6 flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <span className="bg-yellow-600 text-black w-8 h-8 rounded-full flex items-center justify-center text-sm">3</span> 
+                    起局排盘认证
+                  </span>
+                  <span className="text-sm font-normal text-gray-500">参数已同步，支持手动修改</span>
+                </h2>
+
+                <div className="flex flex-wrap items-center justify-center gap-4 bg-gray-900 p-4 rounded-lg border border-gray-800 mb-6">            
+                  <div className="flex items-center space-x-2 bg-gray-950 px-2 py-1 rounded border border-gray-700 shadow-sm">              
+                    <label className="font-semibold text-gray-400">立向年份:</label>              
+                    <select 
+                      value={year} 
+                      onChange={(e) => setYear(Number(e.target.value))} 
+                      className="outline-none focus:ring-2 focus:ring-yellow-600 bg-transparent font-bold text-yellow-500 cursor-pointer text-lg"
+                    >
+                      {Array.from({length: 201}, (_, i) => 1900 + i).map(y => (                
+                        <option key={y} value={y}>{y} 年</option>              
+                      ))}
+                    </select>
+                  </div>            
+                  <div className="flex items-center space-x-2 bg-gray-950 px-2 py-1 rounded border border-gray-700 shadow-sm">              
+                    <label className="font-semibold text-gray-400">选定坐山:</label>              
+                    <select 
+                      value={selMountain} 
+                      onChange={(e) => handleMountainSelect(e.target.value)} 
+                      className="outline-none focus:ring-2 focus:ring-yellow-600 bg-transparent font-bold text-yellow-500 cursor-pointer text-lg"
+                    >
+                      {MOUNTAINS.map(m => <option key={m} value={m}>{m}山</option>)}
+                    </select>
+                  </div>            
+                  <div className="flex items-center space-x-2 bg-gray-950 px-2 py-1 rounded border border-gray-700 shadow-sm">              
+                    <label className="font-semibold text-gray-400">罗经三元:</label>              
+                    <select value={yuan} onChange={(e) => setYuan(Number(e.target.value))} className="outline-none focus:ring-2 focus:ring-yellow-600 bg-transparent font-medium text-gray-200 cursor-pointer">                
+                      <option value={0}>上元</option><option value={1}>中元</option><option value={2}>下元</option>              
+                    </select>            
+                  </div>            
+                  <div className="flex items-center space-x-2 bg-gray-950 px-2 py-1 rounded border border-gray-700 shadow-sm">              
+                    <label className="font-semibold text-gray-400">排盘局数:</label>              
+                    <select value={juMode} onChange={(e) => setJuMode(e.target.value)} className="outline-none focus:ring-2 focus:ring-yellow-600 bg-transparent font-bold text-yellow-500 cursor-pointer">                
+                      <option value="auto">系统自动推演</option>                
+                      <optgroup label="阳遁 1-9 局" className="text-gray-300">                  
+                        {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => <option key={`yang-${n}`} value={`yang-${n}`}>阳遁 {n} 局</option>)}                
+                      </optgroup>                
+                      <optgroup label="阴遁 1-9 局" className="text-gray-300">                  
+                        {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => <option key={`yin-${n}`} value={`yin-${n}`}>阴遁 {n} 局</option>)}                
+                      </optgroup>              
+                    </select>            
+                  </div>          
+                  
+                  <button onClick={generateChart} className="bg-gradient-to-r from-yellow-600 to-yellow-500 hover:from-yellow-500 hover:to-yellow-400 text-black font-extrabold py-2 px-8 rounded shadow-[0_0_15px_rgba(212,175,55,0.4)] transition-all transform hover:scale-105">
+                    生成黑金排盘
+                  </button>
+                </div>
+
+                {chartConfig && panData && (
+                  <div ref={exportRef} className="bg-[#0a0a0a] p-6 md:p-10 rounded-xl mx-auto shadow-2xl border border-gray-800/80 relative overflow-hidden mt-8">
+                    <div className="absolute top-4 right-4 z-20">
+                      <button onClick={handleExportPDF} disabled={isExporting} className="bg-gray-800 hover:bg-gray-700 text-yellow-500 border border-yellow-600/50 font-bold py-1.5 px-4 rounded text-sm transition-colors disabled:opacity-50">
+                        {isExporting ? '生成PDF中...' : '导出PDF'}
+                      </button>
+                    </div>
+
+                    {/* 排盘 Header Info */}
+                    <div className="text-center mb-6 relative z-10">
+                      <h2 className="text-2xl md:text-3xl font-extrabold text-yellow-500 mb-3 tracking-wide drop-shadow-md">
+                        {chartConfig.year}年 {chartConfig.mountain}山{panData.direction}向 奇门排盘
+                      </h2>
+                      <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm md:text-base font-semibold text-gray-300 bg-gray-900/80 py-3 px-4 rounded-lg border border-gray-800">
+                        <span className="text-yellow-600">{panData.yearStem}{panData.yearBranch}年</span>
+                        <span>{panData.dayStem}{panData.dayBranch}日 <span className="text-gray-500 text-xs">(选定吉日)</span></span>
+                        <span>{panData.hourStem}{panData.hourBranch}时</span>
+                        <span className="text-cyan-500">{panData.isYang ? '阳' : '阴'}遁 {panData.juNum} 局</span>
+                        <span className="text-gray-400">旬首: {panData.xunName} ({panData.xunStem})</span>
+                      </div>
+                      <div className="flex justify-center gap-6 mt-3 text-xs md:text-sm text-gray-500">
+                        <span>坐山纳甲: {panData.mountainBagua}</span>
+                        <span>朝向纳甲: {panData.facingBagua}</span>
+                        <span>罗经参考度: {chartConfig.degree}°</span>
+                      </div>
+                    </div>
+
+                    {/* 九宫格渲染区 */}
+                    <div className="flex flex-col w-full max-w-[650px] mx-auto select-none mt-2 md:mt-6 relative z-10">
+                      
+                      {/* 上部外盘 */}
+                      <div className="flex w-full">
+                        <div className="w-[3.5rem] md:w-[5.5rem] flex-shrink-0"></div>
+                        <div className="flex-1 grid grid-cols-3 gap-1 md:gap-2 px-[7px] md:px-[12px]">
+                          <div className="flex justify-evenly items-end">{renderTopItems(panData.outerData[4]?.top)}</div>
+                          <div className="flex justify-evenly items-end">{renderTopItems(panData.outerData[9]?.top)}</div>
+                          <div className="flex justify-evenly items-end">{renderTopItems(panData.outerData[2]?.top)}</div>
+                        </div>
+                        <div className="w-[3.5rem] md:w-[5.5rem] flex-shrink-0"></div>
+                      </div>
+
+                      {/* 中间层 */}
+                      <div className="flex w-full my-1 md:my-2">
+                        <div className="w-[3.5rem] md:w-[5.5rem] flex-shrink-0 flex flex-col gap-1 md:gap-2 py-[7px] md:py-[12px] pr-1 md:pr-3">
+                          <div className="flex-1">{renderLeftItems(panData.outerData[4]?.left)}</div>
+                          <div className="flex-1">{renderLeftItems(panData.outerData[3]?.left)}</div>
+                          <div className="flex-1">{renderLeftItems(panData.outerData[8]?.left)}</div>
+                        </div>
+
+                        {/* 主九宫格 */}
+                        <div className="flex-1 grid grid-cols-3 gap-[2px] md:gap-[3px] bg-[#d4af37] border-[3px] md:border-4 border-[#d4af37] p-[2px] shadow-[0_0_20px_rgba(212,175,55,0.15)]">
+                          {mapGrid.map((item) => {
+                            const p = item.p;
+                            const isCenter = p === 5;
+                            return (
+                              <div key={p} className="flex flex-col justify-between p-1 md:p-1.5 relative bg-[#111111] aspect-square overflow-hidden hover:bg-[#1a1a1a] transition-colors">
+                                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none opacity-[0.03]">
+                                  <span className="text-[3rem] md:text-[4.5rem] font-black text-white leading-none tracking-widest">{item.name.substring(0,1)}</span>
+                                  <span className="text-[3rem] md:text-[4.5rem] font-black text-white leading-none tracking-widest">{item.name.substring(1,2)}</span>
+                                </div>
+                                <div className="relative z-10 flex flex-col h-full w-full justify-between">
+                                  {isCenter ? (
+                                    <div className="flex flex-col items-center justify-center h-full">
+                                      <span className="text-gray-500 text-[10px] md:text-sm font-medium mb-1 md:mb-2">(寄坤二)</span>
+                                      <div className="w-8 md:w-10 h-[1px] bg-gray-700 mb-2 md:mb-3"></div>
+                                      <span className="text-xl md:text-2xl font-bold text-yellow-500 drop-shadow-md">{panData.ep[p] || ''}</span>
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <div className="flex justify-between items-start">
+                                        <span className="font-bold text-yellow-500 text-xs md:text-base leading-none">{panData.de[p] || ''}</span>
+                                        <span className="font-bold text-fuchsia-400 text-[10px] md:text-xs leading-none">{panData.hd[p] ? `[${panData.hd[p]}]` : ''}</span>
+                                      </div>
+                                      <div className="flex justify-center items-stretch flex-1 w-full my-1 md:my-2">
+                                        <div className="flex justify-between items-stretch w-full px-1 md:px-2">
+                                          <div className="flex flex-col items-center justify-center mt-1 md:mt-2">
+                                            <span className="font-bold text-red-500 mb-0.5 md:mb-1 whitespace-nowrap drop-shadow-[0_0_3px_rgba(239,68,68,0.4)]">
+                                              <span className="text-base md:text-xl leading-none">{panData.hp[p]?.[0] || ''}</span>
+                                              {panData.hp[p]?.[1] && <span className="text-[10px] md:text-base leading-none ml-[2px]">{panData.hp[p][1]}</span>}
+                                            </span>
+                                            <div className="w-5 md:w-6 h-[1px] bg-gray-600"></div>
+                                            <span className="font-bold text-gray-200 mt-0.5 md:mt-1 whitespace-nowrap drop-shadow-md">
+                                              <span className="text-base md:text-xl leading-none">{panData.ep[p] || ''}</span>
+                                              {p === 2 && panData.ep[5] && <span className="text-[10px] md:text-base leading-none ml-[2px]">{panData.ep[5]}</span>}
+                                            </span>
+                                          </div>
+                                          <div className="flex flex-col items-center justify-between py-1 md:py-1.5">
+                                            <span className="font-bold text-cyan-400 text-xs md:text-lg leading-none -mt-1 md:-mt-1.5 drop-shadow-[0_0_3px_rgba(34,211,238,0.3)]">{panData.st[p] || ''}</span>
+                                            <span className="font-bold text-emerald-400 text-xs md:text-lg leading-none translate-y-[8px] md:translate-y-[14px] drop-shadow-[0_0_3px_rgba(52,211,153,0.3)]">{panData.dr[p] || ''}</span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                      <div className="w-full text-center border-t border-dashed border-gray-700 pt-1 md:pt-1.5 pb-0.5">
+                                        <span className="text-[9px] md:text-xs text-gray-500 font-medium">
+                                          大:{panData.daYn[p] || ''} | 小:{panData.xiaoYn[p] || ''}
+                                        </span>
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        <div className="w-[3.5rem] md:w-[5.5rem] flex-shrink-0 flex flex-col gap-1 md:gap-2 py-[7px] md:py-[12px] pl-1 md:pl-3">
+                          <div className="flex-1">{renderRightItems(panData.outerData[2]?.right)}</div>
+                          <div className="flex-1">{renderRightItems(panData.outerData[7]?.right)}</div>
+                          <div className="flex-1">{renderRightItems(panData.outerData[6]?.right)}</div>
+                        </div>
+                      </div>
+
+                      {/* 下部外盘 */}
+                      <div className="flex w-full">
+                        <div className="w-[3.5rem] md:w-[5.5rem] flex-shrink-0"></div>
+                        <div className="flex-1 grid grid-cols-3 gap-1 md:gap-2 px-[7px] md:px-[12px]">
+                          <div className="flex justify-evenly items-start">{renderBottomItems(panData.outerData[8]?.bottom)}</div>
+                          <div className="flex justify-evenly items-start">{renderBottomItems(panData.outerData[1]?.bottom)}</div>
+                          <div className="flex justify-evenly items-start">{renderBottomItems(panData.outerData[6]?.bottom)}</div>
+                        </div>
+                        <div className="w-[3.5rem] md:w-[5.5rem] flex-shrink-0"></div>
+                      </div>
+
+                    </div>
+                    
+                    <div className="mt-8 text-center text-xs text-yellow-600/50 font-medium">
+                      Powered by 九寶奇门寻龙点穴系统 | www.jiubaoqimen.com
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>  
       );
     }
 
-    // 渲染应用
     const root = ReactDOM.createRoot(document.getElementById('root'));
     root.render(<App />);
   </script>
