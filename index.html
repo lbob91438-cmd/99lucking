@@ -43,7 +43,7 @@
     const BRANCHES = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥'];
     const MOUNTAINS = ['壬', '子', '癸', '丑', '艮', '寅', '甲', '卯', '乙', '辰', '巽', '巳', '丙', '午', '丁', '未', '坤', '申', '庚', '酉', '辛', '戌', '乾', '亥'];
     
-    // 模块一：查龙立向映射数据 (来自图片1)
+    // 模块一：查龙立向映射数据
     const DRAGON_DIRECTIONS = {
       '坎龙': ['乾', '坤', '兑', '离'],
       '坤龙': ['兑', '巽', '坎', '艮'],
@@ -60,13 +60,13 @@
       '离': ['丙', '午', '丁'], '坤': ['未', '坤', '申'], '兑': ['庚', '酉', '辛'], '乾': ['戌', '乾', '亥']
     };
 
-    // 模块二：择吉旬数据 (来自图片2)
+    // 模块二：择吉旬数据
     const XUN_DATA = {
       '丙子旬': ['丙子', '丁丑', '戊寅', '己卯', '庚辰', '辛巳', '壬午', '癸未', '甲申', '乙酉', '丙戌', '丁亥'],
       '庚子旬': ['庚子', '辛丑', '壬寅', '癸卯', '甲辰', '乙巳', '丙午', '丁未', '戊申', '己酉', '庚戌', '辛亥']
     };
 
-    // 奇门排盘基础数据 (原代码)
+    // 奇门排盘基础数据
     const OUTER_RING = [1, 8, 3, 4, 9, 2, 7, 6]; 
     const RING_INDEX = { 1: 0, 8: 1, 3: 2, 4: 3, 9: 4, 2: 5, 7: 6, 6: 7 };
     const DOORS = ['休', '生', '伤', '杜', '景', '死', '惊', '开'];
@@ -102,7 +102,17 @@
       1: { bottom: ['癸', '子', '壬'] }, 6: { bottom: ['亥', '乾'], right: ['戌'] }
     };
 
-    // 获取日历具体日期的干支 (用于择吉高亮)
+    // 计算年份干支 (基于1984年甲子年)
+    function getYearGanzhi(year) {
+      // 1984年 = 甲子年
+      // 年干 = (年份 - 4) % 10，取负数修正
+      const stemIdx = ((year - 4) % 10 + 10) % 10;
+      // 年支 = (年份 - 4) % 12，取负数修正
+      const branchIdx = ((year - 4) % 12 + 12) % 12;
+      return STEMS[stemIdx] + BRANCHES[branchIdx];
+    }
+
+    // 获取日历具体日期的干支
     function getDayGanzhi(date) {
       // 基准日: 2000-01-01 是 戊午 (天干索引4, 地支索引6)
       const anchor = Date.UTC(2000, 0, 1);
@@ -112,39 +122,60 @@
       return STEMS[(4 + offset) % 10] + BRANCHES[(6 + offset) % 12];
     }
 
+    // 生成60甲子列表
+    function generate60Jiazi() {
+      const result = [];
+      for (let i = 0; i < 60; i++) {
+        result.push(STEMS[i % 10] + BRANCHES[i % 12]);
+      }
+      return result;
+    }
+    const GANZHI_60 = generate60Jiazi();
+
     // ==========================================
     // 主应用组件
     // ==========================================
     function App() {  
       // 模块一：查龙立向状态
       const [selDragon, setSelDragon] = useState('坎龙');
-      const [selDirection, setSelDirection] = useState('乾'); // 八卦
-      const [selMountain, setSelMountain] = useState('戌'); // 24山
+      const [selDirection, setSelDirection] = useState('乾');
+      const [selMountain, setSelMountain] = useState('戌');
 
       // 模块二：择吉状态
       const [selXun, setSelXun] = useState('丙子旬');
       const [selPillar, setSelPillar] = useState('丙子');
-      const [calMonth, setCalMonth] = useState(new Date()); // 当前日历显示的月份
-      const [selectedDate, setSelectedDate] = useState(new Date()); // 最终选定的日子
+      const [calMonth, setCalMonth] = useState(new Date());
+      const [selectedDate, setSelectedDate] = useState(new Date());
 
       // 模块三：排盘核心状态
       const [year, setYear] = useState(selectedDate.getFullYear());  
       const [yuan, setYuan] = useState(1);  
       const [juMode, setJuMode] = useState('auto');  
-      const [degree, setDegree] = useState(292.5); // 默认戌山度数
+      const [degree, setDegree] = useState(292.5);
+      
+      // 日干支自选状态
+      const [dayGanzhiMode, setDayGanzhiMode] = useState('auto'); // 'auto' 或 'manual'
+      const [manualDayGanzhi, setManualDayGanzhi] = useState('甲子');
+      
+      // 年干支自选状态
+      const [yearGanzhiMode, setYearGanzhiMode] = useState('auto'); // 'auto' 或 'manual'
+      const [manualYearGanzhi, setManualYearGanzhi] = useState('甲子');
       
       const exportRef = useRef(null);  
       const [isExporting, setIsExporting] = useState(false);  
       const [toastMsg, setToastMsg] = useState('');  
-      const [chartConfig, setChartConfig] = useState(null); // 初始为空，点击生成后才有
+      const [chartConfig, setChartConfig] = useState(null);
 
       // SAAS 邮件登录状态
       const [isAuthenticated, setIsAuthenticated] = useState(false);
       const [userEmail, setUserEmail] = useState('');
       const [loginEmail, setLoginEmail] = useState('');
       const [loginPassword, setLoginPassword] = useState('');
-      const [authMode, setAuthMode] = useState('login'); // 'login' or 'register'
+      const [authMode, setAuthMode] = useState('login');
       const [authLoading, setAuthLoading] = useState(false);
+
+      // 计算当前日干支（用于自动模式）
+      const currentDayGanzhi = useMemo(() => getDayGanzhi(selectedDate), [selectedDate]);
 
       // 模块一联动逻辑
       const handleDragonChange = (dragon) => {
@@ -164,11 +195,10 @@
 
       const handleMountainSelect = (m) => {
         setSelMountain(m);
-        // 同步修改度数
         const mIdx = MOUNTAINS.indexOf(m);
         let deg = mIdx * 15 - 7.5;
         if (deg < 0) deg += 360;
-        setDegree(deg + 7.5); // 取正中度数
+        setDegree(deg + 7.5);
       };
 
       // 模块二联动逻辑
@@ -179,7 +209,7 @@
 
       const handleDateSelect = (date) => {
         setSelectedDate(date);
-        setYear(date.getFullYear()); // 同步年份给模块三
+        setYear(date.getFullYear());
       };
 
       const changeMonth = (offset) => {
@@ -196,9 +226,7 @@
         const daysInMonth = new Date(year, month + 1, 0).getDate();
         
         let days = [];
-        // 填充空白
         for (let i = 0; i < firstDay; i++) days.push(null);
-        // 填充日期
         for (let i = 1; i <= daysInMonth; i++) {
           days.push(new Date(year, month, i));
         }
@@ -207,13 +235,18 @@
 
       // 生成排盘
       const generateChart = () => {    
+        const currentYearGanzhi = getYearGanzhi(year);
         setChartConfig({ 
-          year: selectedDate.getFullYear(), 
+          year, 
           mountain: selMountain, 
           yuan, 
           juMode, 
           degree,
-          dateObj: selectedDate 
+          dateObj: selectedDate,
+          dayGanzhiMode,
+          dayGanzhi: dayGanzhiMode === 'manual' ? manualDayGanzhi : currentDayGanzhi,
+          yearGanzhiMode,
+          yearGanzhi: yearGanzhiMode === 'manual' ? manualYearGanzhi : currentYearGanzhi
         });  
         
         setTimeout(() => {
@@ -240,7 +273,6 @@
           return;
         }
         setAuthLoading(true);
-        // 模拟向服务器发送真实登录/注册请求
         setTimeout(() => {
           setIsAuthenticated(true);
           setUserEmail(loginEmail);
@@ -279,23 +311,24 @@
         }  
       };  
 
-      // 奇门逻辑推演 (与原版逻辑保持绝对一致)
+      // 奇门逻辑推演
       const panData = useMemo(() => {    
         if (!chartConfig) return null;
         const cy = chartConfig.year;    
         const cm = chartConfig.mountain;    
         const cYuan = chartConfig.yuan;    
-        const cJuMode = chartConfig.juMode;    
-        const yearStemIdx = (cy - 4 + 100) % 10;    
-        const yearBranchIdx = (cy - 4 + 120) % 12;    
-        const yearStem = STEMS[yearStemIdx];    
-        const yearBranch = BRANCHES[yearBranchIdx];    
+        const cJuMode = chartConfig.juMode;
         
-        // 此处获取精确的选定日期干支
-        const dayGanzhiStr = getDayGanzhi(chartConfig.dateObj);
+        // 使用选定的日干支（自动或手动）
+        const dayGanzhiStr = chartConfig.dayGanzhi;
         const dayStem = dayGanzhiStr[0];
         const dayBranch = dayGanzhiStr[1];
         const dayStemIdx = STEMS.indexOf(dayStem);
+
+        // 使用选定的年干支（自动或手动）
+        const yearGanzhiStr = chartConfig.yearGanzhi;
+        const yearStem = yearGanzhiStr[0];
+        const yearBranch = yearGanzhiStr[1];
 
         const mountainIdx = MOUNTAINS.indexOf(cm);    
         const dirIdx = (mountainIdx + 12) % 24;    
@@ -412,7 +445,8 @@
           yearStem, yearBranch, dayStem, dayBranch, direction, hourBranch, hourStem,       
           isYang, juNum, xunName, xunStem, autoIsYang, autoJuNum,      
           ep, hp, st, dr, de, hd,       
-          mountainBagua, facingBagua, xiaoYn, daYn, outerData    
+          mountainBagua, facingBagua, xiaoYn, daYn, outerData,
+          dayGanzhiDisplay: dayGanzhiStr
         };  
       }, [chartConfig]);  
 
@@ -471,7 +505,6 @@
           )} 
 
           {!isAuthenticated ? (
-            /* SAAS 登录/注册界面 */
             <div className="max-w-md mx-auto mt-12 md:mt-24 bg-[#161616] border border-gray-800 rounded-2xl p-8 shadow-[0_0_40px_rgba(0,0,0,0.8)] relative overflow-hidden">
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-gray-800 via-yellow-600 to-gray-800"></div>
               
@@ -526,7 +559,6 @@
               </div>
             </div>
           ) : (
-            /* 主应用界面 */
             <div className="max-w-6xl mx-auto space-y-8">
               {/* SAAS 顶栏 */}
               <div className="flex justify-between items-center bg-[#161616] px-6 py-4 rounded-xl border border-gray-800 shadow-md">
@@ -557,7 +589,7 @@
                 {/* 模块一：查龙立向 */}
                 <div className="bg-[#161616] border border-gray-800 rounded-xl p-6 shadow-xl relative overflow-hidden">
                   <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-gray-800 via-yellow-600 to-gray-800"></div>
-                  <h2 className="text-2xl font-bold text-yellow-500 mb-6 flex items-center gap-2">
+                  <h2 className="text-2xl font-bold text-yellow-500 mb-6 flex items-center gap-2"> 
                     <span className="bg-yellow-600 text-black w-8 h-8 rounded-full flex items-center justify-center text-sm">1</span> 
                     查龙立向
                   </h2>
@@ -571,7 +603,7 @@
                     </div>
                     
                     <div className="flex flex-col gap-2">
-                      <label className="text-gray-400 font-bold text-sm">第二步：依龙选向 (可选山向)</label>
+                      <label className="text-gray-400 font-bold text-sm">第二步：依龙选向</label>
                       <div className="flex flex-wrap gap-3">
                         {DRAGON_DIRECTIONS[selDragon].map(dir => (
                           <button key={dir} onClick={() => handleDirectionChange(dir)} className={`flex-1 py-3 rounded border font-bold text-lg transition-all ${selDirection === dir ? 'bg-yellow-600/20 border-yellow-500 text-yellow-400 shadow-[0_0_10px_rgba(212,175,55,0.2)]' : 'bg-gray-900 border-gray-700 text-gray-400 hover:border-gray-500'}`}>
@@ -597,7 +629,7 @@
                 {/* 模块二：择吉 */}
                 <div className="bg-[#161616] border border-gray-800 rounded-xl p-6 shadow-xl relative overflow-hidden">
                   <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-gray-800 via-yellow-600 to-gray-800"></div>
-                  <h2 className="text-2xl font-bold text-yellow-500 mb-6 flex items-center gap-2">
+                  <h2 className="text-2xl font-bold text-yellow-500 mb-6 flex items-center gap-2"> 
                     <span className="bg-yellow-600 text-black w-8 h-8 rounded-full flex items-center justify-center text-sm">2</span> 
                     奇门择吉
                   </h2>
@@ -625,7 +657,6 @@
                     <div className="grid grid-cols-7 gap-1">
                       {generateCalendar().map((date, i) => {
                         if (!date) return <div key={i} className="h-10"></div>;
-                        
                         const dayGz = getDayGanzhi(date);
                         const isMatch = dayGz === selPillar;
                         const isSelected = selectedDate.toDateString() === date.toDateString();
@@ -646,8 +677,9 @@
                         );
                       })}
                     </div>
+
                     <div className="mt-3 text-center text-sm text-gray-400">
-                      当前选中吉日: <span className="text-yellow-500 font-bold">{selectedDate.toLocaleDateString()} ({getDayGanzhi(selectedDate)})</span>
+                      当前选中: <span className="text-yellow-500 font-bold">{selectedDate.toLocaleDateString()} ({getDayGanzhi(selectedDate)})</span>
                     </div>
                   </div>
                 </div>
@@ -657,11 +689,10 @@
               <div className="bg-[#121212] border border-gray-800 rounded-xl p-6 shadow-2xl relative">
                 <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-gray-800 via-yellow-600 to-gray-800"></div>
                 <h2 className="text-2xl font-bold text-yellow-500 mb-6 flex items-center justify-between">
-                  <span className="flex items-center gap-2">
+                  <span className="flex items-center gap-2"> 
                     <span className="bg-yellow-600 text-black w-8 h-8 rounded-full flex items-center justify-center text-sm">3</span> 
                     起局排盘认证
                   </span>
-                  <span className="text-sm font-normal text-gray-500">参数已同步，支持手动修改</span>
                 </h2>
 
                 <div className="flex flex-wrap items-center justify-center gap-4 bg-gray-900 p-4 rounded-lg border border-gray-800 mb-6">            
@@ -677,6 +708,12 @@
                       ))}
                     </select>
                   </div>            
+                  
+                  <div className="flex items-center space-x-2 bg-gray-950 px-2 py-1 rounded border border-gray-700 shadow-sm">              
+                    <label className="font-semibold text-gray-400">年干支:</label>              
+                    <span className="font-bold text-yellow-500">{yearGanzhiMode === 'manual' ? manualYearGanzhi : getYearGanzhi(year)}</span>
+                  </div>
+                  
                   <div className="flex items-center space-x-2 bg-gray-950 px-2 py-1 rounded border border-gray-700 shadow-sm">              
                     <label className="font-semibold text-gray-400">选定坐山:</label>              
                     <select 
@@ -687,12 +724,14 @@
                       {MOUNTAINS.map(m => <option key={m} value={m}>{m}山</option>)}
                     </select>
                   </div>            
+                  
                   <div className="flex items-center space-x-2 bg-gray-950 px-2 py-1 rounded border border-gray-700 shadow-sm">              
                     <label className="font-semibold text-gray-400">罗经三元:</label>              
                     <select value={yuan} onChange={(e) => setYuan(Number(e.target.value))} className="outline-none focus:ring-2 focus:ring-yellow-600 bg-transparent font-medium text-gray-200 cursor-pointer">                
                       <option value={0}>上元</option><option value={1}>中元</option><option value={2}>下元</option>              
                     </select>            
                   </div>            
+                  
                   <div className="flex items-center space-x-2 bg-gray-950 px-2 py-1 rounded border border-gray-700 shadow-sm">              
                     <label className="font-semibold text-gray-400">排盘局数:</label>              
                     <select value={juMode} onChange={(e) => setJuMode(e.target.value)} className="outline-none focus:ring-2 focus:ring-yellow-600 bg-transparent font-bold text-yellow-500 cursor-pointer">                
@@ -704,9 +743,106 @@
                         {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => <option key={`yin-${n}`} value={`yin-${n}`}>阴遁 {n} 局</option>)}                
                       </optgroup>              
                     </select>            
-                  </div>          
+                  </div>
+                </div>
+
+                {/* 年干支选择区域 */}
+                <div className="flex flex-wrap items-center justify-center gap-4 bg-gray-900/50 p-4 rounded-lg border border-gray-800 mb-4">
+                  <div className="flex items-center space-x-2">
+                    <label className="font-semibold text-gray-400">年干支模式:</label>
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={() => { setYearGanzhiMode('auto'); }}
+                        className={`px-4 py-2 rounded font-bold transition-all ${
+                          yearGanzhiMode === 'auto' 
+                            ? 'bg-yellow-600 text-black' 
+                            : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                        }`}
+                      >
+                        自动({getYearGanzhi(year)})
+                      </button>
+                      <button 
+                        onClick={() => { setYearGanzhiMode('manual'); }}
+                        className={`px-4 py-2 rounded font-bold transition-all ${
+                          yearGanzhiMode === 'manual' 
+                            ? 'bg-yellow-600 text-black' 
+                            : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                        }`}
+                      >
+                        手动选择
+                      </button>
+                    </div>
+                  </div>
                   
-                  <button onClick={generateChart} className="bg-gradient-to-r from-yellow-600 to-yellow-500 hover:from-yellow-500 hover:to-yellow-400 text-black font-extrabold py-2 px-8 rounded shadow-[0_0_15px_rgba(212,175,55,0.4)] transition-all transform hover:scale-105">
+                  {yearGanzhiMode === 'manual' && (
+                    <div className="flex items-center space-x-2">
+                      <label className="font-semibold text-gray-400">选择年干支:</label>
+                      <select 
+                        value={manualYearGanzhi}
+                        onChange={(e) => setManualYearGanzhi(e.target.value)}
+                        className="bg-gray-900 border border-gray-700 text-yellow-500 rounded px-3 py-2 outline-none focus:border-yellow-500 cursor-pointer font-bold min-w-[120px]"
+                      >
+                        {GANZHI_60.map(gz => (
+                          <option key={gz} value={gz}>{gz}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+
+                {/* 日干支选择区域 */}
+                <div className="flex flex-wrap items-center justify-center gap-4 bg-gray-900/50 p-4 rounded-lg border border-gray-800 mb-6">
+                  <div className="flex items-center space-x-2">
+                    <label className="font-semibold text-gray-400">日干支模式:</label>
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={() => { setDayGanzhiMode('auto'); }}
+                        className={`px-4 py-2 rounded font-bold transition-all ${
+                          dayGanzhiMode === 'auto' 
+                            ? 'bg-yellow-600 text-black' 
+                            : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                        }`}
+                      >
+                        自动({currentDayGanzhi})
+                      </button>
+                      <button 
+                        onClick={() => { setDayGanzhiMode('manual'); }}
+                        className={`px-4 py-2 rounded font-bold transition-all ${
+                          dayGanzhiMode === 'manual' 
+                            ? 'bg-yellow-600 text-black' 
+                            : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                        }`}
+                      >
+                        手动选择
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {dayGanzhiMode === 'manual' && (
+                    <div className="flex items-center space-x-2">
+                      <label className="font-semibold text-gray-400">选择日干支:</label>
+                      <select 
+                        value={manualDayGanzhi}
+                        onChange={(e) => setManualDayGanzhi(e.target.value)}
+                        className="bg-gray-900 border border-gray-700 text-yellow-500 rounded px-3 py-2 outline-none focus:border-yellow-500 cursor-pointer font-bold min-w-[120px]"
+                      >
+                        {GANZHI_60.map(gz => (
+                          <option key={gz} value={gz}>{gz}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  
+                  <div className="flex items-center space-x-2 text-sm text-gray-400">
+                    <span>当前日干支:</span>
+                    <span className="font-bold text-yellow-500">
+                      {dayGanzhiMode === 'manual' ? manualDayGanzhi : currentDayGanzhi}
+                    </span>
+                  </div>
+                </div>
+                  
+                <div className="text-center">
+                  <button onClick={generateChart} className="bg-gradient-to-r from-yellow-600 to-yellow-500 hover:from-yellow-500 hover:to-yellow-400 text-black font-extrabold py-3 px-12 rounded shadow-[0_0_15px_rgba(212,175,55,0.4)] transition-all transform hover:scale-105 text-lg">
                     生成黑金排盘
                   </button>
                 </div>
@@ -724,18 +860,21 @@
                       <h2 className="text-2xl md:text-3xl font-extrabold text-yellow-500 mb-3 tracking-wide drop-shadow-md">
                         {chartConfig.year}年 {chartConfig.mountain}山{panData.direction}向 奇门排盘
                       </h2>
+
                       <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm md:text-base font-semibold text-gray-300 bg-gray-900/80 py-3 px-4 rounded-lg border border-gray-800">
                         <span className="text-yellow-600">{panData.yearStem}{panData.yearBranch}年</span>
-                        <span>{panData.dayStem}{panData.dayBranch}日 <span className="text-gray-500 text-xs">(选定吉日)</span></span>
+                        <span>{panData.dayStem}{panData.dayBranch}日</span>
                         <span>{panData.hourStem}{panData.hourBranch}时</span>
                         <span className="text-cyan-500">{panData.isYang ? '阳' : '阴'}遁 {panData.juNum} 局</span>
                         <span className="text-gray-400">旬首: {panData.xunName} ({panData.xunStem})</span>
                       </div>
+
                       <div className="flex justify-center gap-6 mt-3 text-xs md:text-sm text-gray-500">
                         <span>坐山纳甲: {panData.mountainBagua}</span>
                         <span>朝向纳甲: {panData.facingBagua}</span>
                         <span>罗经参考度: {chartConfig.degree}°</span>
                       </div>
+
                     </div>
 
                     {/* 九宫格渲染区 */}
@@ -833,7 +972,6 @@
                         </div>
                         <div className="w-[3.5rem] md:w-[5.5rem] flex-shrink-0"></div>
                       </div>
-
                     </div>
                     
                     <div className="mt-8 text-center text-xs text-yellow-600/50 font-medium">
@@ -851,5 +989,6 @@
     const root = ReactDOM.createRoot(document.getElementById('root'));
     root.render(<App />);
   </script>
+
 </body>
 </html>
